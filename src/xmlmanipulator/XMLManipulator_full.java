@@ -5,8 +5,10 @@
  */
 package xmlmanipulator;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileNotFoundException;
+import java.io.FileReader;
 import java.io.FilenameFilter;
 import java.io.IOException;
 import java.io.PrintWriter;
@@ -35,6 +37,9 @@ public class XMLManipulator_full {
     /**
      * @param args the command line arguments
      */
+    public static HashMap<String, List<String>> smartcarsIDsTable = new HashMap<>();
+    boolean useless = mountSmartcarsIDsTable("simpleT", "0.1", "0.01");
+    
     public static void main(String[] args) throws FileNotFoundException {
         
         File dir = new File("data");
@@ -43,6 +48,11 @@ public class XMLManipulator_full {
                 return name.toLowerCase().endsWith(".xml");
             }
         });
+        //mods
+        //alterar pra o arquivo correto
+        //List<String> smartcarsIDs = readFile(".txt");
+        
+        //end mods
         
         DocumentBuilderFactory dbFactory = DocumentBuilderFactory.newInstance();
         DocumentBuilder dBuilder = null;
@@ -55,7 +65,7 @@ public class XMLManipulator_full {
         }
         
         HashMap<Double, HashMap<String, String>> table = new HashMap<>();
-        HashMap<Integer, HashMap<String,List<Double>>> vehiclesTable = new HashMap<>(); //id do smart e lista com timesteps de entrada ate saida
+        HashMap<String, HashMap<String,List<Double>>> vehiclesTable = new HashMap<>(); //id do smart e lista com timesteps de entrada ate saida
         
         if (dBuilder != null) {
             for (File file : files) {
@@ -76,7 +86,7 @@ public class XMLManipulator_full {
                         
                         for(int i=0; i < vehiclesList.getLength();i++){
                             Element vehicle = (Element) vehiclesList.item(i);
-                            Integer id = Integer.parseInt(vehicle.getAttribute("id"));
+                            String id = vehicle.getAttribute("id");
                             
                             if (!vehiclesTable.containsKey(id)) {
                                 vehiclesTable.put(id, new HashMap<>()); //caso n estivesse na tabela, cria essa entrada guardando o tempo de entrada na simulação
@@ -108,83 +118,191 @@ public class XMLManipulator_full {
                 }
             }
 
+            try (PrintWriter out3 = new PrintWriter("system2_Smarts_Time.txt")){
             try (PrintWriter out2 = new PrintWriter("system2_Smarts_Time.txt")){   
-            try (PrintWriter out = new PrintWriter("system2_X_p1.0_s0.5.txt")) {    
+                try (PrintWriter out = new PrintWriter("system2_X_p1.0_s0.5.txt")) {    
 
-            List<Double> stepTimes = new ArrayList<Double>(table.keySet());
-            Collections.sort(stepTimes);
+                List<Double> stepTimes = new ArrayList<Double>(table.keySet());
+                Collections.sort(stepTimes);
                 
                 //my mods
                 //gera um mapa com infos de cada veiculo: tempo total de viagem POR ARQUIVO DE SIMULAÇÃO
-            HashMap<Integer, HashMap<String,Double>> vehiclesTotalTimePerFile = new HashMap<>();
+                /*HashMap<String, HashMap<String,Double>> vehiclesTotalTimePerFile = new HashMap<>();
                 
-            for(Integer vehicleID : vehiclesTable.keySet()){
-                for(String fileName : vehiclesTable.get(vehicleID).keySet()){
-                    List<Double> timeList = vehiclesTable.get(vehicleID).get(fileName);
-                    Collections.sort(timeList);
-                    Double totalTime = timeList.get(timeList.size()-1) - timeList.get(0);
-                    vehiclesTotalTimePerFile.put(vehicleID, new HashMap<>());
-                    vehiclesTotalTimePerFile.get(vehicleID).put(fileName, totalTime);
-                }
-            } 
+                for(String vehicleID : vehiclesTable.keySet()){
+                    for(String fileName : vehiclesTable.get(vehicleID).keySet()){
+                        List<Double> timeList = vehiclesTable.get(vehicleID).get(fileName);
+                        Collections.sort(timeList);
+                        
+                        Double totalTime = timeList.get(timeList.size()-1) - timeList.get(0);
+                        
+                        vehiclesTotalTimePerFile.put(vehicleID, new HashMap<>());
+                        vehiclesTotalTimePerFile.get(vehicleID).put(fileName, totalTime);
+                    }
+                }*/ 
                 //tenho q gerar 3 pra cada file: medioSmarts, medioGeral, medioNonSmarts
 
-            for(File file : files){
-                for(Integer vehicleID : vehiclesTotalTimePerFile.keySet()){
-                    if(vehiclesTotalTimePerFile.get(vehicleID).containsKey(file.getName())){
-                        double tempVehicleTotalTime = vehiclesTotalTimePerFile.get(vehicleID).get(file.getName());
+                List<Double> smartcarsMeanTravelTimePerStep = new ArrayList<>();
+                List<Double> nonSmartcarsMeanTravelTimePerStep = new ArrayList<>();
+                List<Double> allCarsMeanTravelTimePerStep = new ArrayList<>();
+                
+                for(int t=0; t<stepTimes.size();t++){
+                    DescriptiveStatistics dsSmarts = new DescriptiveStatistics();
+                    DescriptiveStatistics dsNonSmarts = new DescriptiveStatistics();
+                    DescriptiveStatistics dsGeral = new DescriptiveStatistics();
+                    
+                    for(File file : files){
+                    List<List<Double>> allTogether = generateValueVectorBasedOnSteps(stepTimes,vehiclesTable, file.getName(),smartcarsIDsTable.get(file.getName()));
+                    //for(){}
+                    //adiciona o step 't' de todos os files
+                    dsSmarts.addValue(allTogether.get(0).get(t));
+                    dsNonSmarts.addValue(allTogether.get(1).get(t));
+                    dsGeral.addValue(allTogether.get(2).get(t));
+                    /*DescriptiveStatistics dsSmartsPerFile = new DescriptiveStatistics();
+                    DescriptiveStatistics dsNonSmartsPerFile = new DescriptiveStatistics();
+                    DescriptiveStatistics dsGeralPerFile = new DescriptiveStatistics();
+                
+                    for(String vehicleID : vehiclesTotalTimePerFile.keySet()){
+                        if(vehiclesTotalTimePerFile.get(vehicleID).containsKey(file.getName())){
+                            double tempVehicleTotalTime = vehiclesTotalTimePerFile.get(vehicleID).get(file.getName());
                         
-                        if(true /* se o ID tiver na lista de smarts*/){
-                            //dsSmarts.addValue(tempVehicleTotalTime);
-                            //dsGeral.addValue(tempVehicleTotalTime);
-                        }else{
-                            //dsNonSmarts.addValue(tempVehicleTotalTime);
-                            //dsGeral.addValue(tempVehicleTotalTime);
+                            if( smartcarsIDs.contains(vehicleID)){
+                                dsSmartsPerFile.addValue(tempVehicleTotalTime);
+                                dsGeralPerFile.addValue(tempVehicleTotalTime);
+                            }else{
+                                dsNonSmartsPerFile.addValue(tempVehicleTotalTime);
+                                dsGeralPerFile.addValue(tempVehicleTotalTime);
+                            }
                         }
                     }
-                }
                 //print ds.getMean //me da o tempo medio das coisas pra cada file
+                    //out.printf("%.5f\r\n", dsSmartsPerFile.getMean()); //tempo medio de todos os Smarts POR FILE
+                    dsSmarts.addValue(dsSmartsPerFile.getMean());
+                    dsNonSmarts.addValue(dsNonSmartsPerFile.getMean());
+                    dsGeral.addValue(dsGeralPerFile.getMean());
+                */
+                }
+                    //adiciona ordenadamente por timeStep o tempo médio de viagem pra cada categoria por CONDIÇÃO ('p' e 's')
+                smartcarsMeanTravelTimePerStep.add(dsSmarts.getMean());
+                nonSmartcarsMeanTravelTimePerStep.add(dsNonSmarts.getMean());
+                allCarsMeanTravelTimePerStep.add(dsGeral.getMean());
                 
-                //parei aqui!!!!!!!!!!!!!!!!!!
-            }
+                }
                 
+                for(int t=0; t<stepTimes.size(); t++){
+                    out.printf("%.5f\r\n", smartcarsMeanTravelTimePerStep.get(t)); //smarts
+                    out2.printf("%.5f\r\n", nonSmartcarsMeanTravelTimePerStep.get(t)); //nonSmarts
+                    out3.printf("%.5f\r\n", allCarsMeanTravelTimePerStep.get(t)); //all
+                }
                 //end my mods
                 
                 
-                for (Double stepTime : stepTimes) {
+                    /*for (Double stepTime : stepTimes) {
                     //out.printf("\"Step %.5f\"", stepTime);
-                    out.printf("%.5f\r\n", stepTime);
-                    DescriptiveStatistics ds = new DescriptiveStatistics();
-                    for (File file : files) {
-                        double value;
-                        if (table.get(stepTime).containsKey(file.getName())) {
-                            value = Double.parseDouble(table.get(stepTime).get(file.getName()));
+                        out.printf("%.5f\r\n", stepTime);
+                        DescriptiveStatistics ds = new DescriptiveStatistics();
+                        for (File file : files) {
+                            double value;
+                            if (table.get(stepTime).containsKey(file.getName())) {
+                                value = Double.parseDouble(table.get(stepTime).get(file.getName()));
                             
-                            if(value < 0.0){
+                                if(value < 0.0){
                                 
-                                ds.addValue(0.0);
+                                    ds.addValue(0.0);
                             
-                            }else{
-                                ds.addValue(value);
+                                }else{
+                                    ds.addValue(value);
                             
-                            }
+                                }
                             
                            
                          //   out.printf(",\"%.5f\"", value);
-                        } else {
+                            } else {
                         //    out.print(",\"\"");
+                            }
                         }
-                    }
                    // out.printf(",\"%.5f\",\"%.5f\"\r\n", ds.getMean(), ds.getStandardDeviation());
                   
-                       out2.printf("%.5f\r\n", ds.getMean());
+                        out2.printf("%.5f\r\n", ds.getMean());
                    
                     
-                }
-            }} catch (FileNotFoundException ex) {
-                Logger.getLogger(XMLManipulator_full.class.getName()).log(Level.SEVERE, null, ex);
+                    }*/
+            }}} 
+            catch (FileNotFoundException ex) {
+                    Logger.getLogger(XMLManipulator_full.class.getName()).log(Level.SEVERE, null, ex);
             }
         }
     }
+    
+    
+    private static List<String> readFile(String filename){
+        List<String> records = new ArrayList<String>();
+        try{
+            BufferedReader reader = new BufferedReader(new FileReader(filename));
+            String line;
+            while ((line = reader.readLine()) != null){
+              records.add(line);
+            }
+            reader.close();
+            return records;
+        }
+        catch (Exception e){
+            System.err.format("Exception occurred trying to read '%s'.", filename);
+            e.printStackTrace();
+            return null;
+        }
+    }
+    
+    
+    public static List<List<Double>> generateValueVectorBasedOnSteps(List<Double> timeSteps, HashMap<String, HashMap<String,List<Double>>> vehiclesTable, String fileName, List<String> smartcarsIDs){
+        List<Double> smartcarsMeanTravelTimePerStep = new ArrayList<>();
+        List<Double> nonSmartcarsMeanTravelTimePerStep = new ArrayList<>();
+        List<Double> allCarsMeanTravelTimePerStep = new ArrayList<>();
+        
+        List<List<Double>> allTogether = new ArrayList<>();
+        
+        for(Double timeStep : timeSteps){ //em ordem crescente
+            DescriptiveStatistics dsSmartsPerFile = new DescriptiveStatistics();
+            DescriptiveStatistics dsNonSmartsPerFile = new DescriptiveStatistics();
+            DescriptiveStatistics dsGeralPerFile = new DescriptiveStatistics();
+                
+            for(String vehicleID : vehiclesTable.keySet()){
+                List<Double> timeList = vehiclesTable.get(vehicleID).get(fileName);
+                Collections.sort(timeList);
+                Collections.reverse(timeList); //ordenado do maior pro menor, ou seja, da saida pra entrada
+                
+                if(timeStep >= timeList.get(0)){
+                    if( smartcarsIDs.contains(vehicleID)){
+                        //adiciona o tempo total de viagem de cada carro q ja terminou de viajar
+                        dsSmartsPerFile.addValue(timeList.get(0) - timeList.get(timeList.size() -1));
+                        dsGeralPerFile.addValue(timeList.get(0) - timeList.get(timeList.size() -1));
+                    }
+                    else{
+                        dsNonSmartsPerFile.addValue(timeList.get(0) - timeList.get(timeList.size() -1));
+                        dsGeralPerFile.addValue(timeList.get(0) - timeList.get(timeList.size() -1));
+                    }
+                }
+            }
+            smartcarsMeanTravelTimePerStep.add(dsSmartsPerFile.getMean());
+            nonSmartcarsMeanTravelTimePerStep.add(dsNonSmartsPerFile.getMean());
+            allCarsMeanTravelTimePerStep.add(dsGeralPerFile.getMean());            
+        }
+        
+        //os vetores devem estar carregados com os tempos médios de viagem de cada categoria
+        
+        allTogether.add(smartcarsMeanTravelTimePerStep);
+        allTogether.add(nonSmartcarsMeanTravelTimePerStep);
+        allTogether.add(allCarsMeanTravelTimePerStep);
+        
+        return allTogether;
+    }
+    
+    public boolean mountSmartcarsIDsTable(String model, String p, String s){
+        for(int i=1; i <11;i++){
+            String key = model+"."+p+"."+s+"." +i +"."+".Smarts.txt";
+            smartcarsIDsTable.put(key,readFile(key));
+        }  
+        return true;
+    } 
     
 }
